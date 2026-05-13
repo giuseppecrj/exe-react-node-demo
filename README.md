@@ -43,6 +43,8 @@ curl http://localhost:3000/health
 
 ## Create an exe.dev VM
 
+Full setup instructions live in [`docs/exe-dev-setup.md`](docs/exe-dev-setup.md).
+
 ```bash
 chmod +x scripts/exe-create-vm.sh
 ./scripts/exe-create-vm.sh exe-react-node-demo
