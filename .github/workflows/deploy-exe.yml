@@ -2,6 +2,10 @@ name: Deploy to exe.dev
 
 on:
   workflow_dispatch:
+    inputs:
+      ref:
+        description: Git SHA, tag, or branch to deploy. Defaults to the workflow commit.
+        required: false
   push:
     branches: [main]
 
@@ -11,52 +15,94 @@ concurrency:
 
 env:
   EXE_VM_USER: ${{ vars.EXE_VM_USER || 'exedev' }}
-  EXE_APP_DIR: ${{ vars.EXE_APP_DIR || '/home/exedev/apps/exe-react-node-demo' }}
+  EXE_APP_DIR: ${{ vars.EXE_APP_DIR || '/home/exedev/exe-react-node-demo' }}
+  EXE_APP_PORT: ${{ vars.EXE_APP_PORT || '3000' }}
+  DEPLOY_REF: ${{ github.event.inputs.ref || github.sha }}
 
 jobs:
-  deploy:
+  verify:
     runs-on: ubuntu-latest
-    environment: exe-dev
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.ref || github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - run: docker build -t exe-react-node-demo:deploy-check .
 
+  deploy:
+    runs-on: ubuntu-latest
+    needs: verify
+    environment: exe-dev
+    steps:
       - name: Configure SSH key
         env:
           EXE_SSH_PRIVATE_KEY: ${{ secrets.EXE_SSH_PRIVATE_KEY }}
           EXE_VM_HOST: ${{ secrets.EXE_VM_HOST }}
         run: |
-          test -n "$EXE_VM_HOST" || (echo "Missing secret EXE_VM_HOST, e.g. my-vm.exe.xyz" && exit 1)
+          test -n "$EXE_VM_HOST" || (echo "Missing secret EXE_VM_HOST, e.g. exe-demo.exe.xyz" && exit 1)
           test -n "$EXE_SSH_PRIVATE_KEY" || (echo "Missing secret EXE_SSH_PRIVATE_KEY" && exit 1)
+
           mkdir -p ~/.ssh
-          printf '%s
-' "$EXE_SSH_PRIVATE_KEY" > ~/.ssh/exe_deploy_key
+          printf '%s\n' "$EXE_SSH_PRIVATE_KEY" > ~/.ssh/exe_deploy_key
           chmod 600 ~/.ssh/exe_deploy_key
           ssh-keyscan -H "$EXE_VM_HOST" >> ~/.ssh/known_hosts
+          ssh-keyscan -H exe.dev >> ~/.ssh/known_hosts
 
-      - name: Copy app to exe.dev VM
+      - name: Deploy exact Git ref from exe.dev VM
         env:
           EXE_VM_HOST: ${{ secrets.EXE_VM_HOST }}
         run: |
-          ssh -i ~/.ssh/exe_deploy_key "$EXE_VM_USER@$EXE_VM_HOST" "mkdir -p '$EXE_APP_DIR'"
-          rsync -az --delete             --exclude '.git' --exclude 'node_modules' --exclude 'dist'             -e "ssh -i ~/.ssh/exe_deploy_key"             ./ "$EXE_VM_USER@$EXE_VM_HOST:$EXE_APP_DIR/"
+          ssh -i ~/.ssh/exe_deploy_key "$EXE_VM_USER@$EXE_VM_HOST" \
+            bash -s -- "$EXE_APP_DIR" "$DEPLOY_REF" "$EXE_APP_PORT" <<'REMOTE'
+          set -euo pipefail
 
-      - name: Build and restart container on exe.dev
+          EXE_APP_DIR="${1:?missing app dir}"
+          DEPLOY_REF="${2:?missing deploy ref}"
+          PORT="${3:?missing app port}"
+
+          cd "$EXE_APP_DIR"
+
+          if [[ ! -d .git ]]; then
+            echo "Expected $EXE_APP_DIR to be a git checkout." >&2
+            echo "Clone the repo on the VM first, preferably through the exe.dev GitHub integration." >&2
+            exit 1
+          fi
+
+          git config --global --add safe.directory "$EXE_APP_DIR"
+          git fetch --prune origin '+refs/heads/*:refs/remotes/origin/*' '+refs/tags/*:refs/tags/*'
+
+          if TARGET_SHA="$(git rev-parse --verify --quiet "${DEPLOY_REF}^{commit}")"; then
+            :
+          elif TARGET_SHA="$(git rev-parse --verify --quiet "origin/${DEPLOY_REF}^{commit}")"; then
+            :
+          else
+            echo "Could not resolve deploy ref: $DEPLOY_REF" >&2
+            exit 1
+          fi
+
+          git checkout --detach "$TARGET_SHA"
+          chmod +x scripts/exe-deploy-on-vm.sh
+          PORT="$PORT" scripts/exe-deploy-on-vm.sh
+          REMOTE
+
+      - name: Ensure exe.dev proxy points at app port
         env:
           EXE_VM_HOST: ${{ secrets.EXE_VM_HOST }}
         run: |
-          ssh -i ~/.ssh/exe_deploy_key "$EXE_VM_USER@$EXE_VM_HOST" << EOF
-            set -euxo pipefail
-            cd "$EXE_APP_DIR"
-            docker compose up -d --build
-            docker compose ps
-            curl --fail --silent --show-error http://127.0.0.1:3000/health
-          EOF
+          VM_NAME="${EXE_VM_HOST%.exe.xyz}"
+          ssh -i ~/.ssh/exe_deploy_key exe.dev "share port $VM_NAME $EXE_APP_PORT"
 
       - name: Deployment summary
         env:
           EXE_VM_HOST: ${{ secrets.EXE_VM_HOST }}
         run: |
           echo "### Deployed to exe.dev" >> "$GITHUB_STEP_SUMMARY"
-          echo "Private/protected URL: https://$EXE_VM_HOST/" >> "$GITHUB_STEP_SUMMARY"
-          echo "If needed, set the proxied port: \`ssh exe.dev share port ${EXE_VM_HOST%.exe.xyz} 3000\`" >> "$GITHUB_STEP_SUMMARY"
-          echo "To make public: \`ssh exe.dev share set-public ${EXE_VM_HOST%.exe.xyz}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "URL: https://$EXE_VM_HOST/" >> "$GITHUB_STEP_SUMMARY"
+          echo "App dir: $EXE_APP_DIR" >> "$GITHUB_STEP_SUMMARY"
+          echo "Requested ref: $DEPLOY_REF" >> "$GITHUB_STEP_SUMMARY"
+          echo "Port: $EXE_APP_PORT" >> "$GITHUB_STEP_SUMMARY"

@@ -9,7 +9,7 @@ A minimal full-stack demo showing how to run a React website plus Node.js server
 - The public/private web proxy is built in. `https://<vm>.exe.xyz/` proxies to a port on the VM and is private by default.
 - Docker works on the default `exeuntu` image (`docker run --rm alpine:latest echo hello`).
 - The proxy chooses a port from a Dockerfile `EXPOSE`; this demo exposes `3000`. You can force it with `ssh exe.dev share port <vmname> 3000`.
-- GitHub Actions can deploy by SSHing into the VM, copying the repo, and running `docker compose up -d --build`.
+- GitHub Actions can deploy by SSHing into the VM, fetching the requested git ref, and running `docker compose up -d --build`.
 
 ## App structure
 
@@ -111,17 +111,26 @@ Optional repository variables:
 | Variable | Default |
 | --- | --- |
 | `EXE_VM_USER` | `exedev` |
-| `EXE_APP_DIR` | `/home/exedev/apps/exe-react-node-demo` |
+| `EXE_APP_DIR` | `/home/exedev/exe-react-node-demo` |
+| `EXE_APP_PORT` | `3000` |
+
+Before the first deploy, the VM app directory must already be a git checkout, preferably cloned through the exe.dev GitHub integration:
+
+```bash
+ssh exe-react-node-demo.exe.xyz "git clone https://<integration>.int.exe.xyz/OWNER/REPO.git /home/exedev/exe-react-node-demo"
+```
 
 Then push to `main` or run **Deploy to exe.dev** manually.
 
 The workflow:
 
-1. Checks out the repo.
-2. SSHes into the exe.dev VM.
-3. Rsyncs the app to `/home/exedev/apps/exe-react-node-demo`.
-4. Runs `docker compose up -d --build` on the VM.
-5. Verifies `http://127.0.0.1:3000/health`.
+1. Checks the requested git ref in GitHub Actions (`npm run check` and `docker build`).
+2. SSHes into the exe.dev VM using `EXE_SSH_PRIVATE_KEY`.
+3. Fetches the requested git ref inside `/home/exedev/exe-react-node-demo`.
+4. Checks out the exact commit on the VM.
+5. Runs `scripts/exe-deploy-on-vm.sh`, which runs `docker compose up -d --build`.
+6. Verifies `http://127.0.0.1:3000/health`.
+7. Ensures exe.dev's proxy points at port `3000`.
 
 ## Configure exe.dev proxy
 

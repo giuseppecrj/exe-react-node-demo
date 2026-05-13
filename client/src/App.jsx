@@ -20,7 +20,7 @@ function App() {
   return (
     <main className="shell">
       <section className="hero">
-        <p className="eyebrow">React + Node on exe.dev</p>
+        <p className="eyebrow">exe.dev deployment demo</p>
         <h1>One tiny full-stack app, one persistent VM.</h1>
         <p className="lede">
           This demo builds a Vite React frontend, serves it from Express, and deploys with Docker

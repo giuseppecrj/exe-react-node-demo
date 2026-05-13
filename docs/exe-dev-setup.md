@@ -214,9 +214,10 @@ Repo → Settings → Secrets and variables → Actions → Variables
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `EXE_VM_USER` | `exedev` | SSH user on the VM. |
-| `EXE_APP_DIR` | `/home/exedev/apps/exe-react-node-demo` | Directory where the app is copied on the VM. |
+| `EXE_APP_DIR` | `/home/exedev/exe-react-node-demo` | Git checkout on the VM. |
+| `EXE_APP_PORT` | `3000` | Production app port to healthcheck and proxy. |
 
-Most setups do not need to set these.
+Most setups do not need to set these, except `EXE_APP_DIR` if your VM checkout lives somewhere else.
 
 ## 7. Run deployment
 
@@ -237,14 +238,22 @@ To deploy manually:
 GitHub → Actions → Deploy to exe.dev → Run workflow
 ```
 
+Before the first workflow run, `EXE_APP_DIR` must already be a git checkout on the VM. Prefer cloning through the exe.dev GitHub integration:
+
+```bash
+ssh exe-react-node-demo.exe.xyz "git clone https://<integration>.int.exe.xyz/OWNER/REPO.git /home/exedev/exe-react-node-demo"
+```
+
 The workflow does this:
 
-1. Checks out the repo.
+1. Verifies the requested git ref in GitHub Actions with `npm run check` and `docker build`.
 2. Configures SSH using `EXE_SSH_PRIVATE_KEY`.
-3. Creates the app directory on the VM.
-4. Uses `rsync` to copy the repo to the VM.
-5. Runs `docker compose up -d --build` on the VM.
-6. Verifies `http://127.0.0.1:3000/health`.
+3. SSHes into the exe.dev VM.
+4. Fetches branches/tags from `origin` inside `EXE_APP_DIR`.
+5. Checks out the exact requested commit/ref on the VM.
+6. Runs `scripts/exe-deploy-on-vm.sh`, which runs `docker compose up -d --build`.
+7. Verifies `http://127.0.0.1:3000/health`.
+8. Ensures exe.dev's HTTPS proxy points at `EXE_APP_PORT`.
 
 ## 8. Configure exe.dev HTTPS proxy
 
@@ -381,7 +390,7 @@ SSH into the VM:
 
 ```bash
 ssh exe-react-node-demo.exe.xyz
-cd /home/exedev/apps/exe-react-node-demo
+cd /home/exedev/exe-react-node-demo
 docker compose ps
 docker compose logs web --tail=100
 curl http://127.0.0.1:3000/health
