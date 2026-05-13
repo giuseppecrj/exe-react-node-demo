@@ -32,6 +32,7 @@ npm run dev
 
 - React dev server: <http://localhost:5173>
 - Node server: <http://localhost:3000>
+- Local API calls from React should stay relative, e.g. `fetch('/api/hello')`; Vite proxies `/api` to the Node server in `client/vite.config.js`.
 
 ## Local production check
 

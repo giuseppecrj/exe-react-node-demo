@@ -7,8 +7,13 @@ function App() {
 
   useEffect(() => {
     fetch('/api/hello')
-      .then((res) => res.json())
-      .then(setHello)
+      .then(async (res) => {
+        if (!res.ok) {
+          throw new Error(`API request failed with ${res.status}`);
+        }
+        return res.json();
+      })
+      .then((response) => setHello(response))
       .catch((error) => setHello({ error: error.message }));
   }, []);
 
