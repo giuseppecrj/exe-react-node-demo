@@ -86,7 +86,7 @@ For development on the VM, clone the repo, then run:
 
 ```bash
 cd exe-react-node-demo
-EXE_DEV_HOST=exe-react-node-demo.exe.xyz docker compose -f docker-compose.dev.yml up
+docker compose -f docker-compose.dev.yml up
 ```
 
 This starts:
@@ -308,7 +308,7 @@ You do not need host Node/npm for this repo. Remove the distro packages and use 
 ```bash
 sudo apt-get remove -y npm nodejs || true
 sudo apt-get autoremove -y || true
-EXE_DEV_HOST=exe-react-node-demo.exe.xyz docker compose -f docker-compose.dev.yml up
+docker compose -f docker-compose.dev.yml up
 ```
 
 The dev Compose file uses the official Node 22 container image and keeps `node_modules` in a Docker volume.

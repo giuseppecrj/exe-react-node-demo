@@ -42,7 +42,7 @@ npm run dev
 - React dev server: <http://localhost:5173>
 - Node server: <http://localhost:3000>
 - Local API calls from React should stay relative, e.g. `fetch('/api/hello')`; Vite proxies `/api` to the Node server in `client/vite.config.js`.
-- On an exe.dev VM, run: `EXE_DEV_HOST=your-vm.exe.xyz docker compose -f docker-compose.dev.yml up`.
+- On an exe.dev VM, run the same Docker Compose command and open `https://your-vm.exe.xyz:5173/`. Vite is configured to allow `*.exe.xyz` dev hosts.
 
 ## Local production check
 
@@ -128,4 +128,4 @@ ssh exe.dev share set-private exe-react-node-demo
 
 ## Notes for Vite/Next dev servers
 
-This demo serves the built React app from Express in production, so it avoids Vite dev-server host allow-list issues. If you run a Vite dev server directly on exe.dev, configure `server.host = '0.0.0.0'` and `server.allowedHosts = ['<vm>.exe.xyz']`.
+This demo serves the built React app from Express in production, so it avoids Vite dev-server host allow-list issues. For dev mode on exe.dev, `client/vite.config.js` sets `server.host = '0.0.0.0'` and allows `.exe.xyz` hosts. You can override this with `VITE_ALLOWED_HOSTS=host1,host2`.
