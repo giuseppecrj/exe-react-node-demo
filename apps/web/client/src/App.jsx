@@ -1,12 +1,12 @@
-import React, { useEffect, useState } from 'react';
-import { createRoot } from 'react-dom/client';
-import './styles.css';
+import { useEffect, useState } from "react";
+import { createRoot } from "react-dom/client";
+import "./styles.css";
 
 function App() {
   const [hello, setHello] = useState(null);
 
   useEffect(() => {
-    fetch('/api/hello')
+    fetch("/api/hello")
       .then(async (res) => {
         if (!res.ok) {
           throw new Error(`API request failed with ${res.status}`);
@@ -21,10 +21,10 @@ function App() {
     <main className="shell">
       <section className="hero">
         <p className="eyebrow">exe.dev deployment demo</p>
-        <h1>One tiny full-stack app, one persistent VM.</h1>
+        <h1>Production-shaped Bun monorepo, deployed to one persistent VM.</h1>
         <p className="lede">
-          This demo builds a Vite React frontend, serves it from Express, and deploys with Docker
-          to an exe.dev VM over SSH from GitHub Actions.
+          This reference app uses a Bun workspace, Vite React frontend, Express API, Docker Compose,
+          exe.dev GitHub integration, and GitHub Actions SSH deployment.
         </p>
         <div className="card">
           <span>API response</span>
@@ -35,4 +35,4 @@ function App() {
   );
 }
 
-createRoot(document.getElementById('root')).render(<App />);
+createRoot(document.getElementById("root")).render(<App />);

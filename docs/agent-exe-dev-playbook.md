@@ -1,127 +1,106 @@
-# Agent playbook: create an app, deploy it to exe.dev, return a link
+# Agent playbook: deploy apps to exe.dev
 
-This document explains how an agent should use this repo as a reusable deployment pattern.
+This document explains how agents should use this repo as a reusable production deployment pattern.
 
-## Does this make sense as a repo?
+## What this repo is
 
-Yes. The repo can serve as an executable reference implementation:
+This repo is an executable reference implementation for exe.dev deployments:
 
-- It demonstrates the app shape agents should produce.
-- It contains known-good Docker and Compose patterns.
-- It captures exe.dev-specific gotchas such as Vite allowed hosts, proxy ports, and avoiding `apt install npm`.
-- It gives agents concrete commands they can copy, adapt, run, and verify.
+- Bun workspace monorepo.
+- Docker-first local, dev VM, and production VM flows.
+- exe.dev GitHub integration for VM-side repo access.
+- GitHub Actions SSH trigger for CI/CD.
+- One public/proxied production port.
+- Health-gated deployment script.
 
-The repo should stay small, boring, and explicit. It is less a product app and more a deployment specimen.
+Agents should copy the pattern, not blindly copy app-specific names.
 
-## Should this become a skill?
+## Required user/environment state
 
-Yes, but keep the layers separate:
+Agents can automate only after these are true:
 
-1. **`AGENTS.md` in this repo** is the canonical project-local reference. Any agent that opens this repo should immediately know the exe.dev deployment pattern.
-2. **A reusable skill** should be a short triggerable workflow for agents working in other repos. The skill should tell the agent to apply the pattern from this repo: Docker-first dev/prod, exe.dev SSH control plane, proxy setup, verification, and final URL.
-3. **Scripts/templates** can grow later if repeated steps become deterministic enough to automate safely.
+- User has an exe.dev account.
+- User's SSH public key is registered with exe.dev.
+- `ssh exe.dev whoami` succeeds locally.
+- User has authorized/installed exe.dev GitHub integration when private repo access from the VM is needed.
+- User has approved any public sharing or destructive VM operation.
 
-Do not put every exe.dev doc into the skill. The skill should route the agent to this repo's pattern and to exe.dev docs when it needs platform details.
+Do not ask users to paste private keys into chat.
 
-## What an agent needs to deploy automatically
+## Required app shape
 
-### Required from the user/environment
+A production-ready app for this pattern has:
 
-- exe.dev account already created.
-- User's SSH public key registered with exe.dev.
-- Local shell can run `ssh exe.dev whoami` successfully.
-- Permission to create a VM.
-- Desired app/VM name or permission to choose one.
-- App visibility: private by default, public only if requested.
+- Root `bun run check` command.
+- Production `Dockerfile`.
+- Production `docker-compose.yml` with one HTTP port.
+- `/health` endpoint.
+- App server binding `0.0.0.0`.
+- Docker-based dev path.
+- No dependency on host-level Node/npm installs.
 
-### Required from the target app
+For Vite or similar dev servers on exe.dev:
 
-- A single HTTP entry port for production, usually `3000`.
-- A deterministic build/check command.
-- A health endpoint, preferably `/health`.
-- A production Dockerfile.
-- A production Compose file.
-- For dev mode, a Compose file using official runtime images rather than host-level runtime installs.
+- bind `0.0.0.0`
+- allow `.exe.xyz` hosts
+- proxy frontend `/api` to the backend
 
-### Required when the VM must access the repo
+## exe.dev command split
 
-- exe.dev GitHub integration installed for `OWNER/REPO`.
-- Integration attached to the target VM or to a tag/auto-attach rule.
-- Integration clone hostname, e.g. `https://<integration>.int.exe.xyz/OWNER/REPO.git`.
+```bash
+ssh exe.dev ...         # control plane
+ssh <vm>.exe.xyz ...    # VM shell
+```
 
-This is required for private repos when the VM will clone, pull, or run agents against the repo. It is not required for a one-shot `rsync` deploy from the local workspace.
+Use `ssh exe.dev` for:
 
-### Optional but useful
+- `whoami`
+- `ls`
+- `new`
+- `share port`
+- `share set-public` / `set-private`
+- `integrations add/attach/list`
 
-- Custom domain requirements.
-- Whether the VM is temporary, dev, staging, or prod.
-- Whether to install/use Shelley or other agents on the VM.
+Use `ssh <vm>.exe.xyz` for:
 
-## Automation boundaries
+- `git fetch`
+- `docker compose up`
+- logs
+- healthchecks
+- file inspection
 
-Agents can safely automate:
+## GitHub integration decision tree
 
-- Inspecting app framework and ports.
-- Adding Dockerfile/Compose files.
-- Running local checks.
-- Creating a VM after `ssh exe.dev whoami` works.
-- Attaching an existing GitHub integration to a VM.
-- Copying files with `rsync` for one-shot deploys.
-- Cloning/pulling through the GitHub integration for VM-native workflows.
-- Running `docker compose up -d --build`.
-- Setting the exe.dev proxy port.
-- Returning the verified URL.
+Use the exe.dev GitHub integration by default when the VM keeps working with the repo:
 
-Agents should ask before:
-
-- Making the VM public.
-- Deleting/recreating VMs.
-- Creating long-lived API tokens.
-- Adding GitHub deploy secrets.
-- Changing DNS/custom domains.
-- Installing broad system packages on the VM.
-
-Agents cannot automate without user action:
-
-- First-time exe.dev login/account setup.
-- Browser-based GitHub integration authorization or GitHub App installation.
-- SSH key registration if no key is already accepted by exe.dev.
-
-## Repo transfer decision tree
-
-Use the GitHub integration by default when the VM will keep working with the repo:
-
-- Private repo cloned from the VM: **GitHub integration required**.
-- Shelley/agent coding inside the VM: **GitHub integration strongly preferred**.
-- Long-lived dev/prod VM that pulls updates: **GitHub integration preferred**.
-- One-shot deploy from the current local workspace: `rsync` is acceptable.
+- Private repo cloned from VM: **required**.
+- Shelley/agent coding inside VM: **strongly preferred**.
+- Long-lived production VM that pulls updates: **preferred**.
+- One-shot local deploy: `rsync` is acceptable, but not the production CI/CD pattern in this repo.
 - Public repo: plain `git clone` is acceptable, but integration still works.
-- GitHub Actions deployment: SSH deploy key/secrets can replace VM-side GitHub integration.
 
-Integration command shape:
+Command shape:
 
 ```bash
 ssh exe.dev "integrations add github --name=<integration> --repository=OWNER/REPO --attach=vm:<vm>"
 ssh exe.dev "integrations attach <integration> vm:<vm>"
-ssh <vm>.exe.xyz "git clone https://<integration>.int.exe.xyz/OWNER/REPO.git"
+ssh <vm>.exe.xyz "git clone https://<integration>.int.exe.xyz/OWNER/REPO.git /home/exedev/<repo>"
 ```
 
-## The one-shot deployment workflow
+## Production CI/CD pattern
 
-Use this when the user asks: "create a simple app, deploy it to exe.dev, and give me the link."
+1. GitHub Actions verifies the requested ref with Bun and Docker.
+2. GitHub Actions SSHes into the exe.dev VM with a dedicated deploy key.
+3. VM fetches through exe.dev GitHub integration.
+4. VM checks out the exact SHA.
+5. VM runs `scripts/exe-deploy-on-vm.sh`.
+6. Script builds/restarts Docker Compose and waits for `/health`.
+7. Workflow points exe.dev proxy at the production port.
+8. Agent returns the verified URL.
 
-1. Build or modify the app locally.
-2. Add Docker/Compose using this repo's pattern.
-3. Run checks locally.
-4. Verify exe.dev control-plane access.
-5. Create a VM.
-6. Copy the workspace to the VM.
-7. Build/run with Docker Compose on the VM.
-8. Point the proxy at the app port.
-9. Verify health locally on the VM and through the exe.dev URL if accessible.
-10. Return the URL and important commands.
+## One-shot deployment skeleton
 
-Command skeleton:
+Use this only when the user wants a quick deploy from the current workspace and does not need VM-side repo lifecycle:
 
 ```bash
 VM=my-app
@@ -137,75 +116,47 @@ ssh $VM.exe.xyz "cd '$APP_DIR' && docker compose up -d --build && curl --fail ht
 ssh exe.dev "share port $VM $PORT"
 ```
 
-Return:
+## Production VM bootstrap skeleton
 
-```text
-Deployed: https://my-app.exe.xyz/
-```
-
-## Dev VM workflow
-
-Use this when the user wants interactive development or agent work on exe.dev.
-
-1. Create a `-dev` VM.
-2. Attach GitHub integration if the repo is private.
-3. Clone the repo inside the VM.
-4. Run dev Compose.
-5. Point proxy at the dev server port.
-6. Open Shelley for agent work.
-
-For this repo:
+Use this for long-lived deployments:
 
 ```bash
-docker compose -f docker-compose.dev.yml up
-ssh exe.dev "share port exe-demo 5173"
+VM=my-app
+REPO=OWNER/REPO
+INTEGRATION=my-app-repo
+APP_DIR=/home/exedev/my-app
+
+ssh exe.dev "new --name=$VM --tag=app,prod,agent"
+ssh exe.dev "integrations add github --name=$INTEGRATION --repository=$REPO --attach=vm:$VM"
+ssh $VM.exe.xyz "git clone https://$INTEGRATION.int.exe.xyz/$REPO.git $APP_DIR"
+ssh $VM.exe.xyz "cd $APP_DIR && PORT=3000 scripts/exe-deploy-on-vm.sh"
+ssh exe.dev "share port $VM 3000"
 ```
 
-Open:
+## Verification before saying done
 
-```text
-https://exe-demo.exe.xyz/
-https://exe-demo.shelley.exe.xyz/
-```
-
-## Production workflow
-
-Use this for the stable hosted app.
+Do not rely on a green build alone. Verify the actual deployed state:
 
 ```bash
-docker compose -f docker-compose.dev.yml down || true
-docker compose up -d --build
-ssh exe.dev "share port <vm> 3000"
+ssh exe.dev "share show <vm>"
+ssh <vm>.exe.xyz "cd <app-dir> && cat .deployed-sha && git rev-parse HEAD && docker compose ps && curl --fail http://127.0.0.1:<port>/health"
 ```
 
-Keep production boring:
-
-- No Vite dev server.
-- No host-level Node/npm dependency.
-- No direct agent mutation unless the user explicitly wants that.
-- Verify with `/health` and logs.
-
-## Recommended reusable skill shape
-
-A skill should be named something like `deploy-app-to-exe-dev`.
-
-Trigger description:
+Only then return:
 
 ```text
-Deploys apps to exe.dev using a Docker-first pattern inspired by exe-react-node-demo. Use when the user asks to create, prototype, host, or deploy an app on exe.dev and wants a working URL.
+https://<vm>.exe.xyz/
 ```
 
-The skill should instruct the agent to:
+## What to ask the user
 
-1. Inspect the app and identify the production port.
-2. Add or adapt Dockerfile/Compose.
-3. Avoid host-level runtime installs on exe.dev.
-4. Verify `ssh exe.dev whoami` before VM creation.
-5. Use `ssh exe.dev` for lifecycle/proxy commands.
-6. Use `ssh <vm>.exe.xyz` for VM shell commands.
-7. Deploy with Docker Compose.
-8. Set proxy port.
-9. Verify health.
-10. Return the URL.
+Ask when missing:
 
-Keep the skill short. Use this repo's `AGENTS.md` and docs as the deeper reference.
+- VM name.
+- Public/private visibility.
+- GitHub repo path and integration name.
+- Whether to reuse or create a VM.
+- Permission before destructive operations.
+- Custom domain requirements.
+
+Never make the site public by default.

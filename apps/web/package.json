@@ -1,0 +1,24 @@
+{
+  "name": "@exe-react-node-demo/web",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently \"bun run dev:server\" \"bun run dev:client\"",
+    "dev:server": "NODE_ENV=development bun --watch server/index.js",
+    "dev:client": "vite --config client/vite.config.js",
+    "build": "vite build --config client/vite.config.js",
+    "start": "NODE_ENV=production bun server/index.js",
+    "check": "bun run build && bun build server/index.js --target=bun --outfile=/tmp/exe-react-node-demo-server-check.js"
+  },
+  "dependencies": {
+    "express": "latest",
+    "morgan": "latest"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "latest",
+    "concurrently": "latest",
+    "react": "latest",
+    "react-dom": "latest",
+    "vite": "latest"
+  }
+}

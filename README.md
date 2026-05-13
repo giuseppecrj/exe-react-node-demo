@@ -1,112 +1,103 @@
-# exe.dev React + Node demo
+# exe.dev Bun Monorepo Deployment Reference
 
-A minimal full-stack demo showing how to run a React website plus Node.js server on an [exe.dev](https://exe.dev) VM and deploy it from GitHub Actions.
+This repository is a production-shaped reference for building, developing, and deploying a small full-stack app to [exe.dev](https://exe.dev). It is intentionally more than a demo app: it is meant to outlive individual agent sessions as a canonical pattern that agents and humans can copy into real projects.
 
-## What I pulled from the linked video + exe.dev docs
+## What this repo demonstrates
 
-- exe.dev is VM-first: persistent Linux VMs, reachable over HTTPS, with sane secure defaults.
-- It is good for quick idea deployment because you can create many small VMs without paying per tiny project.
-- The public/private web proxy is built in. `https://<vm>.exe.xyz/` proxies to a port on the VM and is private by default.
-- Docker works on the default `exeuntu` image (`docker run --rm alpine:latest echo hello`).
-- The proxy chooses a port from a Dockerfile `EXPOSE`; this demo exposes `3000`. You can force it with `ssh exe.dev share port <vmname> 3000`.
-- GitHub Actions can deploy by SSHing into the VM, fetching the requested git ref, and running `docker compose up -d --build`.
+- Bun workspace monorepo layout.
+- Vite React frontend and Bun/Express backend in `apps/web`.
+- Docker-first local and VM development; no host-level Node/npm required.
+- Production Docker image that serves the built frontend from the backend on one HTTP port.
+- exe.dev VM lifecycle, GitHub integration, private-by-default HTTPS proxy, and production port selection.
+- GitHub Actions CI/CD where the runner SSHes into exe.dev and the VM pulls the exact git commit through the exe.dev GitHub integration.
+- Agent-facing guidance for reliably creating and deploying similar apps.
 
-## App structure
+## Repository layout
 
 ```text
-client/                 Vite React app
-server/                 Express API + static file server
-Dockerfile              Builds React, then runs Express in production
-docker-compose.yml      Runs the production app on port 3000
-docker-compose.dev.yml  Runs the Vite + Express dev servers on ports 5173 and 3000
-.github/workflows/ci.yml
+apps/web/                       Production app package
+  client/                       Vite React frontend
+  server/                       Bun/Express API + static frontend server
+  package.json                  App scripts and runtime dependencies
+packages/                       Shared packages go here as the project grows
+Dockerfile                      Production Bun image build
+docker-compose.yml              Production runtime on port 3000
+docker-compose.dev.yml          Dev runtime on ports 5173 and 3000
+.github/workflows/ci.yml        Pull request/main checks
 .github/workflows/deploy-exe.yml
-scripts/exe-create-vm.sh
-AGENTS.md               Agent-facing deployment guidance
-docs/agent-exe-dev-playbook.md
-                        Deeper agent workflow/playbook
-skills/deploy-app-to-exe-dev/
-                        Draft reusable agent skill
+                                Deploy exact git ref to exe.dev
+docs/                           Human and agent deployment documentation
+scripts/docker-dev.sh           Dev container dependency bootstrap
+scripts/exe-create-vm.sh        Small VM creation helper
+scripts/exe-deploy-on-vm.sh     VM-local production deployment script
+AGENTS.md                       Agent-facing rules for this repo
 ```
 
 ## Local development
 
-Use Docker Compose if you want the same Node 22 toolchain locally and on exe.dev:
+Use Docker Compose for the same Bun runtime locally and on exe.dev:
 
 ```bash
 docker compose -f docker-compose.dev.yml up
 ```
 
-Or run directly on your host if you already have Node 22 installed:
+Open:
 
-```bash
-npm install
-npm run dev
+```text
+http://localhost:5173/
 ```
 
-- React dev server: <http://localhost:5173>
-- Node server: <http://localhost:3000>
-- Local API calls from React should stay relative, e.g. `fetch('/api/hello')`; Vite proxies `/api` to the Node server in `client/vite.config.js`.
-- On an exe.dev VM, run the same Docker Compose command and open `https://your-vm.exe.xyz:5173/`. Vite is configured to allow `*.exe.xyz` dev hosts.
+The Vite frontend proxies `/api` to the Bun/Express server on port `3000`.
+
+If you already have Bun installed locally, you can run without Docker:
+
+```bash
+bun install
+bun run dev
+```
 
 ## Local production check
 
 ```bash
-npm run check
+bun install
+bun run check
 docker compose up -d --build
-curl http://localhost:3000/health
+curl --fail http://127.0.0.1:3000/health
+docker compose down
 ```
 
-If you do not have host Node installed, run the check in Docker:
+## exe.dev deployment quick path
 
-```bash
-docker compose -f docker-compose.dev.yml run --rm web sh -lc "npm ci && npm run check"
-```
+Full details are in [`docs/exe-dev-setup.md`](docs/exe-dev-setup.md) and [`docs/ci-cd.md`](docs/ci-cd.md).
 
-## Agent usage
+Minimum shape:
 
-This repo is intended to be a reference pattern for agents. If an agent is asked to create and deploy an app to exe.dev, it should read:
+1. User signs in to exe.dev and registers an SSH public key.
+2. Create an exe.dev VM.
+3. Attach the exe.dev GitHub integration for this repo.
+4. Clone this repo on the VM at `/home/exedev/exe-react-node-demo`.
+5. Add GitHub Actions secrets/variables.
+6. Push to `main`.
 
-- [`AGENTS.md`](AGENTS.md)
-- [`docs/agent-exe-dev-playbook.md`](docs/agent-exe-dev-playbook.md)
-- [`docs/exe-dev-setup.md`](docs/exe-dev-setup.md)
+The workflow then:
 
-There is also a draft reusable skill at [`skills/deploy-app-to-exe-dev/SKILL.md`](skills/deploy-app-to-exe-dev/SKILL.md).
+1. Checks the requested ref with Bun and Docker in GitHub Actions.
+2. SSHes into the exe.dev VM.
+3. Fetches the requested ref through the exe.dev GitHub integration.
+4. Checks out the exact commit.
+5. Runs `scripts/exe-deploy-on-vm.sh`.
+6. Points exe.dev's HTTPS proxy at port `3000`.
 
-For VM-native agent workflows, treat the exe.dev GitHub integration as part of the standard setup so the VM can clone/pull private repos without GitHub PATs.
+## Required GitHub Actions configuration
 
-## Create an exe.dev VM
+Secrets:
 
-Full setup instructions live in [`docs/exe-dev-setup.md`](docs/exe-dev-setup.md).
+| Secret | Meaning |
+| --- | --- |
+| `EXE_VM_HOST` | VM hostname, e.g. `exe-demo.exe.xyz` |
+| `EXE_SSH_PRIVATE_KEY` | Private key whose public key is registered with exe.dev |
 
-```bash
-chmod +x scripts/exe-create-vm.sh
-./scripts/exe-create-vm.sh exe-react-node-demo
-```
-
-Or manually:
-
-```bash
-ssh exe.dev 'new --name=exe-react-node-demo --comment="React + Node demo" --tag=demo,react,node'
-ssh exe-react-node-demo.exe.xyz
-```
-
-Inside the VM, verify Docker:
-
-```bash
-docker run --rm alpine:latest echo hello
-```
-
-## GitHub Actions deployment
-
-Add these repository secrets:
-
-| Secret | Example | Notes |
-| --- | --- | --- |
-| `EXE_VM_HOST` | `exe-react-node-demo.exe.xyz` | The exe.dev VM host. |
-| `EXE_SSH_PRIVATE_KEY` | `-----BEGIN OPENSSH PRIVATE KEY-----...` | A private key whose public key is registered with exe.dev. |
-
-Optional repository variables:
+Variables:
 
 | Variable | Default |
 | --- | --- |
@@ -114,44 +105,19 @@ Optional repository variables:
 | `EXE_APP_DIR` | `/home/exedev/exe-react-node-demo` |
 | `EXE_APP_PORT` | `3000` |
 
-Before the first deploy, the VM app directory must already be a git checkout, preferably cloned through the exe.dev GitHub integration:
+## Documentation map
 
-```bash
-ssh exe-react-node-demo.exe.xyz "git clone https://<integration>.int.exe.xyz/OWNER/REPO.git /home/exedev/exe-react-node-demo"
-```
+- [`docs/architecture.md`](docs/architecture.md) — why the repo is structured as a Bun monorepo.
+- [`docs/exe-dev-setup.md`](docs/exe-dev-setup.md) — first-time VM, GitHub integration, and deployment setup.
+- [`docs/ci-cd.md`](docs/ci-cd.md) — CI/CD pipeline contract and rollback model.
+- [`docs/runbook.md`](docs/runbook.md) — operational commands and failure recovery.
+- [`docs/agent-exe-dev-playbook.md`](docs/agent-exe-dev-playbook.md) — agent-specific deployment playbook.
 
-Then push to `main` or run **Deploy to exe.dev** manually.
+## Important exe.dev rules
 
-The workflow:
-
-1. Checks the requested git ref in GitHub Actions (`npm run check` and `docker build`).
-2. SSHes into the exe.dev VM using `EXE_SSH_PRIVATE_KEY`.
-3. Fetches the requested git ref inside `/home/exedev/exe-react-node-demo`.
-4. Checks out the exact commit on the VM.
-5. Runs `scripts/exe-deploy-on-vm.sh`, which runs `docker compose up -d --build`.
-6. Verifies `http://127.0.0.1:3000/health`.
-7. Ensures exe.dev's proxy points at port `3000`.
-
-## Configure exe.dev proxy
-
-The Dockerfile has `EXPOSE 3000`, which exe.dev may auto-detect. To force the HTTPS proxy to the app port:
-
-```bash
-ssh exe.dev share port exe-react-node-demo 3000
-```
-
-By default, exe.dev web access is private/authenticated. To make the site public:
-
-```bash
-ssh exe.dev share set-public exe-react-node-demo
-```
-
-To make it private again:
-
-```bash
-ssh exe.dev share set-private exe-react-node-demo
-```
-
-## Notes for Vite/Next dev servers
-
-This demo serves the built React app from Express in production, so it avoids Vite dev-server host allow-list issues. For dev mode on exe.dev, `client/vite.config.js` sets `server.host = '0.0.0.0'` and allows `.exe.xyz` hosts. You can override this with `VITE_ALLOWED_HOSTS=host1,host2`.
+- `ssh exe.dev ...` talks to the control plane.
+- `ssh <vm>.exe.xyz ...` talks to the VM.
+- `https://<vm>.exe.xyz/` proxies to one selected VM port.
+- Use the exe.dev GitHub integration when the VM must clone or pull private repos.
+- Keep sites private by default; make public only when explicitly requested.
+- Do not install JavaScript runtimes with `sudo apt install npm`; use Docker or Bun-managed tooling.

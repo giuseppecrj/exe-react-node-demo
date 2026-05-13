@@ -1,6 +1,31 @@
-node_modules
-dist
-.env
+# macOS
 .DS_Store
+
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+dist-ssr/
+apps/*/dist/
+*.local
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
 npm-debug.log*
+bun-debug.log*
+
+# IDE/tooling
+.idea/
+.vscode/
 .pi/
+
+# Rust/Tauri, if added later
+/target/
+**/target/
+**/*.rs.bk
