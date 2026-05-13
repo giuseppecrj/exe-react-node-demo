@@ -17,13 +17,22 @@ A minimal full-stack demo showing how to run a React website plus Node.js server
 client/                 Vite React app
 server/                 Express API + static file server
 Dockerfile              Builds React, then runs Express in production
-docker-compose.yml      Runs the app on port 3000
+docker-compose.yml      Runs the production app on port 3000
+docker-compose.dev.yml  Runs the Vite + Express dev servers on ports 5173 and 3000
 .github/workflows/ci.yml
 .github/workflows/deploy-exe.yml
 scripts/exe-create-vm.sh
 ```
 
 ## Local development
+
+Use Docker Compose if you want the same Node 22 toolchain locally and on exe.dev:
+
+```bash
+docker compose -f docker-compose.dev.yml up
+```
+
+Or run directly on your host if you already have Node 22 installed:
 
 ```bash
 npm install
@@ -33,6 +42,7 @@ npm run dev
 - React dev server: <http://localhost:5173>
 - Node server: <http://localhost:3000>
 - Local API calls from React should stay relative, e.g. `fetch('/api/hello')`; Vite proxies `/api` to the Node server in `client/vite.config.js`.
+- On an exe.dev VM, run: `EXE_DEV_HOST=your-vm.exe.xyz docker compose -f docker-compose.dev.yml up`.
 
 ## Local production check
 
@@ -40,6 +50,12 @@ npm run dev
 npm run check
 docker compose up -d --build
 curl http://localhost:3000/health
+```
+
+If you do not have host Node installed, run the check in Docker:
+
+```bash
+docker compose -f docker-compose.dev.yml run --rm web sh -lc "npm ci && npm run check"
 ```
 
 ## Create an exe.dev VM
@@ -54,7 +70,7 @@ chmod +x scripts/exe-create-vm.sh
 Or manually:
 
 ```bash
-ssh exe.dev new --name exe-react-node-demo --comment "React + Node demo" --tag demo,react,node
+ssh exe.dev 'new --name=exe-react-node-demo --comment="React + Node demo" --tag=demo,react,node'
 ssh exe-react-node-demo.exe.xyz
 ```
 

@@ -3,12 +3,18 @@ set -euo pipefail
 
 VM_NAME="${1:-exe-react-node-demo}"
 
+if [[ ! "$VM_NAME" =~ ^[a-z0-9][a-z0-9-]*$ ]]; then
+  echo "Invalid VM name: $VM_NAME" >&2
+  echo "Use lowercase letters, numbers, and hyphens, starting with a letter or number." >&2
+  exit 1
+fi
+
 cat <<'MSG'
 This creates an exe.dev VM using the exe.dev SSH control plane.
 Prereqs: an exe.dev account, your SSH public key added to exe.dev, and Docker-capable exeuntu image/default VM.
 MSG
 
-ssh exe.dev new --name "$VM_NAME" --comment "React + Node demo deployed from GitHub Actions" --tag demo,react,node
+ssh exe.dev "new --name=$VM_NAME --comment='React + Node demo deployed from GitHub Actions' --tag=demo,react,node"
 
 echo
 cat <<MSG

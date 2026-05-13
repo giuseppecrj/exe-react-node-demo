@@ -47,11 +47,10 @@ chmod +x scripts/exe-create-vm.sh
 Or manually:
 
 ```bash
-ssh exe.dev new \
-  --name exe-react-node-demo \
-  --comment "React + Node demo deployed from GitHub Actions" \
-  --tag demo,react,node
+ssh exe.dev 'new --name=exe-react-node-demo --comment="React + Node demo deployed from GitHub Actions" --tag=demo,react,node'
 ```
+
+Use `--flag=value` for exe.dev value flags, and keep the outer quotes when a value contains spaces. Without that, exe.dev can see values like the VM name or words in `--comment` as unsupported positional arguments.
 
 Verify the VM appears:
 
@@ -80,6 +79,40 @@ This repo deploys with Docker Compose, so also check:
 ```bash
 docker compose version
 ```
+
+You do **not** need host-level Node/npm. Avoid `sudo apt install npm`; Ubuntu's `npm` package can install an old Node/npm toolchain. This repo uses Docker Compose for both dev and production so Node 22 comes from the container image.
+
+For development on the VM, clone the repo, then run:
+
+```bash
+cd exe-react-node-demo
+EXE_DEV_HOST=exe-react-node-demo.exe.xyz docker compose -f docker-compose.dev.yml up
+```
+
+This starts:
+
+- Vite React dev server on port `5173`
+- Express API server on port `3000`
+
+Open the Vite dev server through exe.dev's extra port proxy:
+
+```text
+https://exe-react-node-demo.exe.xyz:5173/
+```
+
+Or point the main exe.dev HTTPS proxy at Vite while developing:
+
+```bash
+ssh exe.dev share port exe-react-node-demo 5173
+```
+
+Switch the main proxy back to production Express before/after deploying production:
+
+```bash
+ssh exe.dev share port exe-react-node-demo 3000
+```
+
+If you explicitly want to run the app directly on the VM without Docker, install Node 22 with a user-level version manager such as `fnm`, not `apt`.
 
 ## 3. Create or choose a deployment SSH key
 
@@ -268,6 +301,20 @@ Test locally with the same key:
 ssh -i ~/.ssh/exe_react_node_demo_deploy exedev@exe-react-node-demo.exe.xyz whoami
 ```
 
+### Wrong Node/npm version after `sudo apt install npm`
+
+You do not need host Node/npm for this repo. Remove the distro packages and use Docker Compose instead:
+
+```bash
+sudo apt-get remove -y npm nodejs || true
+sudo apt-get autoremove -y || true
+EXE_DEV_HOST=exe-react-node-demo.exe.xyz docker compose -f docker-compose.dev.yml up
+```
+
+The dev Compose file uses the official Node 22 container image and keeps `node_modules` in a Docker volume.
+
+If you still want host-level Node, install Node 22 with `fnm` rather than `apt`.
+
 ### Docker is missing or not running
 
 SSH into the VM and run:
@@ -343,7 +390,7 @@ For a new app:
 6. Run:
 
 ```bash
-ssh exe.dev new --name your-new-vm
+ssh exe.dev 'new --name=your-new-vm'
 ssh exe.dev share port your-new-vm <port>
 ```
 
