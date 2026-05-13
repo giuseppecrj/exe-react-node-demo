@@ -22,6 +22,11 @@ docker-compose.dev.yml  Runs the Vite + Express dev servers on ports 5173 and 30
 .github/workflows/ci.yml
 .github/workflows/deploy-exe.yml
 scripts/exe-create-vm.sh
+AGENTS.md               Agent-facing deployment guidance
+docs/agent-exe-dev-playbook.md
+                        Deeper agent workflow/playbook
+skills/deploy-app-to-exe-dev/
+                        Draft reusable agent skill
 ```
 
 ## Local development
@@ -57,6 +62,18 @@ If you do not have host Node installed, run the check in Docker:
 ```bash
 docker compose -f docker-compose.dev.yml run --rm web sh -lc "npm ci && npm run check"
 ```
+
+## Agent usage
+
+This repo is intended to be a reference pattern for agents. If an agent is asked to create and deploy an app to exe.dev, it should read:
+
+- [`AGENTS.md`](AGENTS.md)
+- [`docs/agent-exe-dev-playbook.md`](docs/agent-exe-dev-playbook.md)
+- [`docs/exe-dev-setup.md`](docs/exe-dev-setup.md)
+
+There is also a draft reusable skill at [`skills/deploy-app-to-exe-dev/SKILL.md`](skills/deploy-app-to-exe-dev/SKILL.md).
+
+For VM-native agent workflows, treat the exe.dev GitHub integration as part of the standard setup so the VM can clone/pull private repos without GitHub PATs.
 
 ## Create an exe.dev VM
 

@@ -2,15 +2,14 @@
 
 This document captures the repeatable setup for deploying this React + Node app to an [exe.dev](https://exe.dev) VM from GitHub Actions.
 
-The intended deployment model is deliberately simple:
+The intended deployment model is deliberately simple: exe.dev is a persistent Linux VM with built-in HTTPS proxying, so apps deploy with Docker Compose.
 
-1. Create an exe.dev VM.
-2. Ensure Docker works on the VM.
-3. Store SSH deployment credentials in GitHub Secrets.
-4. Let GitHub Actions copy the repo to the VM and run `docker compose up -d --build`.
-5. Point exe.dev's HTTPS proxy at the app port.
+This repo supports two flows:
 
-No custom platform adapter is required because exe.dev is just a persistent Linux VM with built-in HTTPS proxying.
+1. **Agent/dev VM flow, recommended:** attach the exe.dev GitHub integration, clone/pull the repo inside the VM, and run Docker Compose there. This avoids GitHub PATs and avoids host-level Node/npm installs.
+2. **GitHub Actions flow:** GitHub Actions SSHes into the VM, copies the repo, and runs `docker compose up -d --build`. Use this when you want conventional CI/CD.
+
+For agent workflows, treat the GitHub integration as first-class whenever the VM must access a private repo.
 
 ## Prerequisites
 
@@ -20,7 +19,8 @@ You need:
 - An SSH public key added to exe.dev.
 - Local SSH access to the exe.dev control plane.
 - A GitHub repository containing this app.
-- GitHub Actions enabled for the repo.
+- The exe.dev GitHub integration installed for the repo if the VM will clone/pull it directly.
+- GitHub Actions enabled for the repo if using the optional CI/CD workflow.
 
 Before continuing, verify local access:
 
@@ -114,7 +114,41 @@ ssh exe.dev share port exe-react-node-demo 3000
 
 If you explicitly want to run the app directly on the VM without Docker, install Node 22 with a user-level version manager such as `fnm`, not `apt`.
 
-## 3. Create or choose a deployment SSH key
+## 3. Set up the GitHub integration for VM-native development
+
+Use the exe.dev GitHub integration when the VM needs to clone or pull this repo, especially for private repos and Shelley/agent workflows. This is preferred over storing GitHub PATs on the VM.
+
+First, link GitHub from the exe.dev Integrations page. Then create and attach a per-repo integration. Replace `OWNER/REPO` with this repository:
+
+```bash
+ssh exe.dev "integrations add github --name=exe-react-node-demo --repository=OWNER/REPO --attach=vm:exe-react-node-demo"
+```
+
+If the integration already exists, attach it to this VM:
+
+```bash
+ssh exe.dev "integrations attach exe-react-node-demo vm:exe-react-node-demo"
+```
+
+Clone from inside the VM using the integration hostname exe.dev reports:
+
+```bash
+ssh exe-react-node-demo.exe.xyz
+cd /home/exedev
+mkdir -p apps
+cd apps
+git clone https://exe-react-node-demo.int.exe.xyz/OWNER/REPO.git exe-react-node-demo
+cd exe-react-node-demo
+```
+
+For long-lived dev VMs, this becomes the normal update flow:
+
+```bash
+git pull
+docker compose -f docker-compose.dev.yml up
+```
+
+## 4. Create or choose a deployment SSH key
 
 GitHub Actions needs an SSH private key that can connect to the exe.dev VM.
 
@@ -144,7 +178,7 @@ Expected output:
 exedev
 ```
 
-## 4. Add GitHub repository secrets
+## 5. Add GitHub repository secrets
 
 In GitHub:
 
@@ -169,7 +203,7 @@ Then paste into the GitHub secret value.
 
 Do **not** commit this private key to the repository.
 
-## 5. Optional GitHub repository variables
+## 6. Optional GitHub repository variables
 
 The deploy workflow has sensible defaults, but you can override them with repo variables:
 
@@ -184,7 +218,7 @@ Repo → Settings → Secrets and variables → Actions → Variables
 
 Most setups do not need to set these.
 
-## 6. Run deployment
+## 7. Run deployment
 
 The deploy workflow lives at:
 
@@ -212,7 +246,7 @@ The workflow does this:
 5. Runs `docker compose up -d --build` on the VM.
 6. Verifies `http://127.0.0.1:3000/health`.
 
-## 7. Configure exe.dev HTTPS proxy
+## 8. Configure exe.dev HTTPS proxy
 
 The app listens on port `3000` in production.
 
@@ -248,7 +282,7 @@ To make it private again:
 ssh exe.dev share set-private exe-react-node-demo
 ```
 
-## 8. Verify the deployed app
+## 9. Verify the deployed app
 
 After GitHub Actions completes, check:
 
@@ -270,7 +304,7 @@ curl https://exe-react-node-demo.exe.xyz/api/hello
 
 If the site is private, you may need to open it in a browser and authenticate through exe.dev instead of using unauthenticated `curl`.
 
-## 9. Troubleshooting
+## 10. Troubleshooting
 
 ### `Host key verification failed`
 
@@ -353,7 +387,7 @@ docker compose logs web --tail=100
 curl http://127.0.0.1:3000/health
 ```
 
-## 10. Optional: exe.dev HTTPS API token for Hermes
+## 11. Optional: exe.dev HTTPS API token for Hermes
 
 Hermes does **not** need an exe.dev API token for this repo if local SSH works. Hermes can run the same `ssh exe.dev ...` commands as you.
 
@@ -375,7 +409,7 @@ Then restart the Hermes gateway/session before relying on it.
 
 Prefer SSH for normal VM setup and deployment because it is simpler and avoids introducing another secret.
 
-## 11. Repurposing this for another repo
+## 12. Repurposing this for another repo
 
 For a new app:
 
